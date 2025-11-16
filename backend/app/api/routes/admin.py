@@ -26,6 +26,7 @@ class Project(BaseModel):
     name: str = Field(..., description="Project name")
     project_gid: str = Field(..., description="Asana project GID")
     section_gid: Optional[str] = Field(None, description="Default section GID (Copywriter)")
+    resend_upcycle_section_gid: Optional[str] = Field(None, description="Section GID for RESEND/UPCYCLE tasks")
 
 
 class SubmitBriefRequest(BaseModel):
@@ -154,6 +155,7 @@ async def submit_brief(request: SubmitBriefRequest):
             doc_url=request.google_doc_url,
             project_gid=project.project_gid,
             section_gid=project.section_gid,
+            resend_upcycle_section_gid=project.resend_upcycle_section_gid,
             dry_run=False
         )
 

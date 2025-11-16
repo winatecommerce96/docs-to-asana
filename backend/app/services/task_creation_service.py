@@ -4,13 +4,35 @@ Task Creation Service
 Orchestrates the end-to-end process of creating Asana tasks from campaign briefs
 """
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from loguru import logger
 
 from app.core.asana_client import AsanaClient
 from app.services.brief_parser import BriefParserService
 from app.services.custom_field_mapper import CustomFieldMapper
 from app.services.google_docs import GoogleDocsService
+
+
+def calculate_business_days_from_today(days: int) -> str:
+    """
+    Calculate a date N business days from today (excluding weekends)
+
+    Args:
+        days: Number of business days to add
+
+    Returns:
+        Date string in YYYY-MM-DD format
+    """
+    current_date = date.today()
+    days_added = 0
+
+    while days_added < days:
+        current_date += timedelta(days=1)
+        # Skip weekends (Saturday=5, Sunday=6)
+        if current_date.weekday() < 5:
+            days_added += 1
+
+    return current_date.strftime("%Y-%m-%d")
 
 
 class TaskCreationService:
@@ -35,6 +57,7 @@ class TaskCreationService:
         doc_url: str,
         project_gid: str,
         section_gid: Optional[str] = None,
+        resend_upcycle_section_gid: Optional[str] = None,
         dry_run: bool = False
     ) -> Dict[str, Any]:
         """
@@ -44,6 +67,7 @@ class TaskCreationService:
             doc_url: Google Doc URL
             project_gid: Asana project GID to create tasks in
             section_gid: Optional section GID to place tasks in
+            resend_upcycle_section_gid: Optional section GID for RESEND/UPCYCLE tasks
             dry_run: If True, parse and preview but don't create tasks
 
         Returns:
@@ -108,7 +132,8 @@ class TaskCreationService:
                     section_gid,
                     idx,
                     doc_url,
-                    headings
+                    headings,
+                    resend_upcycle_section_gid
                 )
 
                 results["results"].append(task_result)
@@ -135,7 +160,8 @@ class TaskCreationService:
         section_gid: Optional[str],
         task_number: int,
         doc_url: str,
-        headings: List[Dict[str, Any]] = None
+        headings: List[Dict[str, Any]] = None,
+        resend_upcycle_section_gid: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Create a single task in Asana
@@ -179,15 +205,22 @@ class TaskCreationService:
             # Step 3: Determine assignee (if specified)
             assignee_gid = task_data.get("assignee_gid")
 
-            # Step 3.5: Route RESEND/UPCYCLE tasks to Coordinator Design Review section
+            # Step 3.5: Route RESEND/UPCYCLE tasks to custom section if specified
             task_type = task_data.get("task_type", "")
             if task_type in ["RESEND", "UPCYCLE"]:
-                # Override section to Coordinator Design Review for RESEND/UPCYCLE tasks
-                section_gid = "1206874104264011"
-                logger.info(f"Routing {task_type} task to Coordinator Design Review section")
+                # Use custom section if provided, otherwise use default Coordinator Design Review
+                if resend_upcycle_section_gid:
+                    section_gid = resend_upcycle_section_gid
+                    logger.info(f"Routing {task_type} task to custom section: {section_gid}")
+                else:
+                    section_gid = "1206874104264011"  # Default: Coordinator Design Review
+                    logger.info(f"Routing {task_type} task to default Coordinator Design Review section")
             # Otherwise use provided section_gid (defaults to Copywriter: 1206874104264005)
 
             # Step 4: Create the task in Asana
+            # Calculate due date as 2 business days from today
+            due_date = calculate_business_days_from_today(2)
+
             created_task = await self.asana_client.create_task(
                 name=task_name,
                 project_gid=project_gid,
@@ -195,7 +228,7 @@ class TaskCreationService:
                 notes=notes,
                 custom_fields=custom_fields_mapped if custom_fields_mapped else None,
                 assignee_gid=assignee_gid,
-                due_date=task_data.get("send_date")
+                due_date=due_date
             )
 
             # Success!
@@ -248,6 +281,16 @@ class TaskCreationService:
         designer_instructions = task_data.get("designer_instructions")
         if designer_instructions:
             notes_parts.append(f"🎨 **Designer Instructions:**\n{designer_instructions}")
+
+        # Targeted Audiences
+        targeted_audiences = task_data.get("targeted_audiences")
+        if targeted_audiences:
+            notes_parts.append(f"🎯 **Targeted Audiences:**\n{targeted_audiences}")
+
+        # Excluded Audiences
+        excluded_audiences = task_data.get("excluded_audiences")
+        if excluded_audiences:
+            notes_parts.append(f"🚫 **Excluded Audiences:**\n{excluded_audiences}")
 
         # Description (overview/context)
         description = task_data.get("description")

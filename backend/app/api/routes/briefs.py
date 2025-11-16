@@ -20,6 +20,7 @@ class BriefRequest(BaseModel):
     google_doc_url: str = Field(..., description="Google Doc URL")
     project_gid: str = Field(..., description="Asana project GID")
     section_gid: Optional[str] = Field(None, description="Asana section GID (optional)")
+    resend_upcycle_section_gid: Optional[str] = Field(None, description="Section GID for RESEND and UPCYCLE tasks (optional)")
     dry_run: bool = Field(False, description="Preview only, don't create tasks")
 
 
@@ -75,6 +76,7 @@ async def process_brief(request: BriefRequest):
             doc_url=request.google_doc_url,
             project_gid=request.project_gid,
             section_gid=request.section_gid,
+            resend_upcycle_section_gid=request.resend_upcycle_section_gid,
             dry_run=request.dry_run
         )
 

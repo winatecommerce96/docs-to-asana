@@ -326,6 +326,16 @@
                             </small>
                         </div>
 
+                        <div class="form-group">
+                            <label for="resendUpcycleSectionSelect">Resend/Upcycle Section (Optional)</label>
+                            <select id="resendUpcycleSectionSelect" disabled>
+                                <option value="">-- Use default (Coordinator Design Review) --</option>
+                            </select>
+                            <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                                Custom section for RESEND and UPCYCLE tasks (optional)
+                            </small>
+                        </div>
+
                         <button type="submit" id="addProjectBtn">
                             Add Project
                         </button>
@@ -406,13 +416,18 @@
         // Load sections for a project
         async function loadSections(projectGid) {
             const sectionSelect = document.getElementById('sectionSelect');
+            const resendUpcycleSectionSelect = document.getElementById('resendUpcycleSectionSelect');
+
             sectionSelect.disabled = true;
             sectionSelect.innerHTML = '<option value="">Loading sections...</option>';
+            resendUpcycleSectionSelect.disabled = true;
+            resendUpcycleSectionSelect.innerHTML = '<option value="">Loading sections...</option>';
 
             try {
                 const response = await fetch(`/admin/sections/${projectGid}`);
                 const sections = await response.json();
 
+                // Populate default section dropdown
                 sectionSelect.innerHTML = '<option value="">-- Select a section --</option>';
                 sections.forEach(s => {
                     const option = document.createElement('option');
@@ -421,7 +436,17 @@
                     sectionSelect.appendChild(option);
                 });
 
+                // Populate resend/upcycle section dropdown
+                resendUpcycleSectionSelect.innerHTML = '<option value="">-- Use default (Coordinator Design Review) --</option>';
+                sections.forEach(s => {
+                    const option = document.createElement('option');
+                    option.value = s.gid;
+                    option.textContent = s.name;
+                    resendUpcycleSectionSelect.appendChild(option);
+                });
+
                 sectionSelect.disabled = false;
+                resendUpcycleSectionSelect.disabled = false;
 
                 // Try to auto-select "Copywriter" section
                 const copywriterSection = sections.find(s =>
@@ -431,8 +456,18 @@
                     sectionSelect.value = copywriterSection.gid;
                 }
 
+                // Try to auto-select "Coordinator Design Review" section for resend/upcycle
+                const coordinatorSection = sections.find(s =>
+                    s.name.toLowerCase().includes('coordinator') &&
+                    s.name.toLowerCase().includes('design')
+                );
+                if (coordinatorSection) {
+                    resendUpcycleSectionSelect.value = coordinatorSection.gid;
+                }
+
             } catch (error) {
                 sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                resendUpcycleSectionSelect.innerHTML = '<option value="">Error loading sections</option>';
                 console.error('Failed to load sections:', error);
             }
         }
@@ -506,11 +541,14 @@
             btn.disabled = true;
             btn.innerHTML = '<span class="loading"></span>Adding Project...';
 
+            const resendUpcycleSectionGid = document.getElementById('resendUpcycleSectionSelect').value;
+
             const project = {
                 id: projectId,
                 name: projectName,
                 project_gid: projectGid,
-                section_gid: sectionGid
+                section_gid: sectionGid,
+                resend_upcycle_section_gid: resendUpcycleSectionGid || null
             };
 
             try {
@@ -531,6 +569,8 @@
                 document.getElementById('projectForm').reset();
                 document.getElementById('sectionSelect').disabled = true;
                 document.getElementById('sectionSelect').innerHTML = '<option value="">-- Select a project first --</option>';
+                document.getElementById('resendUpcycleSectionSelect').disabled = true;
+                document.getElementById('resendUpcycleSectionSelect').innerHTML = '<option value="">-- Use default (Coordinator Design Review) --</option>';
                 selectedProject = null;
 
                 await loadProjects();

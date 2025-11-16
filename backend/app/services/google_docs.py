@@ -97,17 +97,18 @@ class GoogleDocsService:
             raise ValueError(error_msg)
 
     def _extract_text_from_document(self, document: dict) -> str:
-        """Extract plain text and tables from Google Doc structure, formatting tables as markdown"""
+        """Extract text with rich formatting and tables from Google Doc structure"""
         content = document.get('body', {}).get('content', [])
         text_parts = []
 
         for element in content:
             if 'paragraph' in element:
-                # Extract paragraph text
+                # Extract paragraph text with formatting
                 paragraph = element['paragraph']
                 for text_element in paragraph.get('elements', []):
                     if 'textRun' in text_element:
-                        text_parts.append(text_element['textRun'].get('content', ''))
+                        formatted_text = self._format_text_run(text_element['textRun'])
+                        text_parts.append(formatted_text)
 
             elif 'table' in element:
                 # Extract and format table as markdown
@@ -117,8 +118,45 @@ class GoogleDocsService:
 
         return ''.join(text_parts)
 
+    def _format_text_run(self, text_run: dict) -> str:
+        """
+        Format a text run with rich text formatting (bold, italic, links) as markdown
+
+        Converts Google Docs text styles to markdown:
+        - Bold → **text**
+        - Italic → *text*
+        - Links → [text](url)
+        - Bold+Italic → ***text***
+        """
+        content = text_run.get('content', '')
+        text_style = text_run.get('textStyle', {})
+
+        # Check for link
+        link = text_style.get('link', {}).get('url')
+
+        # Check for bold and italic
+        is_bold = text_style.get('bold', False)
+        is_italic = text_style.get('italic', False)
+
+        # Apply formatting
+        formatted = content
+
+        # Apply bold and/or italic
+        if is_bold and is_italic:
+            formatted = f"***{content}***"
+        elif is_bold:
+            formatted = f"**{content}**"
+        elif is_italic:
+            formatted = f"*{content}*"
+
+        # Apply link (wraps around any bold/italic formatting)
+        if link:
+            formatted = f"[{formatted}]({link})"
+
+        return formatted
+
     def _extract_table_as_markdown(self, table: dict) -> str:
-        """Convert a Google Docs table to markdown format for better AI parsing"""
+        """Convert a Google Docs table to markdown format with rich text formatting"""
         rows = table.get('tableRows', [])
         if not rows:
             return ""
@@ -130,14 +168,15 @@ class GoogleDocsService:
             cell_contents = []
 
             for cell in cells:
-                # Extract text from each cell
+                # Extract text from each cell with formatting
                 cell_text = []
                 for content_element in cell.get('content', []):
                     if 'paragraph' in content_element:
                         para = content_element['paragraph']
                         for text_elem in para.get('elements', []):
                             if 'textRun' in text_elem:
-                                cell_text.append(text_elem['textRun'].get('content', ''))
+                                formatted_text = self._format_text_run(text_elem['textRun'])
+                                cell_text.append(formatted_text)
 
                 # Clean up cell text (remove newlines within cells, strip whitespace)
                 cell_content = ''.join(cell_text).replace('\n', ' ').strip()
