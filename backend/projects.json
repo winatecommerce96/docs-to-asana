@@ -1,0 +1,26 @@
+[
+  {
+    "id": "leslie-campaigns",
+    "name": "\ud83d\udce9 Leslie Campaigns",
+    "project_gid": "1202299245188908",
+    "section_gid": "1202299245188935"
+  },
+  {
+    "id": "team-4-campaigns",
+    "name": "\ud83d\udce9 Team 4 Campaigns",
+    "project_gid": "1206874746809992",
+    "section_gid": "1206874104264005"
+  },
+  {
+    "id": "ayaan-s-campaigns",
+    "name": "\ud83d\udce9 Ayaan's Campaigns",
+    "project_gid": "1206789671477981",
+    "section_gid": "1206798787054388"
+  },
+  {
+    "id": "kers-messaging-workflow",
+    "name": "\ud83d\udce2 Kers' Messaging Workflow",
+    "project_gid": "1204335007687389",
+    "section_gid": "1204335132107027"
+  }
+]

@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asana Brief Creation - Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 32px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-bottom: 20px;
+            font-size: 24px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #2980b9;
+        }
+
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        button.danger {
+            background: #e74c3c;
+        }
+
+        button.danger:hover {
+            background: #c0392b;
+        }
+
+        .autocomplete-container {
+            position: relative;
+        }
+
+        .autocomplete-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .autocomplete-results.show {
+            display: block;
+        }
+
+        .autocomplete-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .autocomplete-item:hover {
+            background: #f8f9fa;
+        }
+
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+
+        .project-list {
+            margin-top: 20px;
+        }
+
+        .project-item {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .project-info {
+            flex: 1;
+        }
+
+        .project-name {
+            font-weight: 600;
+            font-size: 16px;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .project-details {
+            font-size: 13px;
+            color: #7f8c8d;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .task-results {
+            margin-top: 20px;
+        }
+
+        .task-result {
+            padding: 10px;
+            border-left: 4px solid #3498db;
+            background: #f8f9fa;
+            margin-bottom: 8px;
+        }
+
+        .task-result.success {
+            border-left-color: #27ae60;
+        }
+
+        .task-result.error {
+            border-left-color: #e74c3c;
+        }
+
+        .task-url {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        .task-url:hover {
+            text-decoration: underline;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📋 Asana Brief Creation</h1>
+
+        <div class="grid">
+            <!-- Left Column: Submit Brief -->
+            <div>
+                <div class="card">
+                    <h2>Submit Campaign Brief</h2>
+                    <div id="submitAlert"></div>
+
+                    <form id="submitForm" onsubmit="submitBrief(event)">
+                        <div class="form-group">
+                            <label for="projectSelect">Select Project *</label>
+                            <select id="projectSelect" required>
+                                <option value="">-- Choose a project --</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="docUrl">Google Doc URL *</label>
+                            <input
+                                type="url"
+                                id="docUrl"
+                                placeholder="https://docs.google.com/document/d/..."
+                                required
+                            />
+                        </div>
+
+                        <button type="submit" id="submitBtn">
+                            Create Tasks from Brief
+                        </button>
+                    </form>
+
+                    <div id="taskResults" class="task-results"></div>
+                </div>
+            </div>
+
+            <!-- Right Column: Manage Projects -->
+            <div>
+                <div class="card">
+                    <h2>Manage Projects</h2>
+                    <div id="projectAlert"></div>
+
+                    <form id="projectForm" onsubmit="addProject(event)">
+                        <div class="form-group" style="display: none;">
+                            <label for="projectId">Project ID * (auto-generated)</label>
+                            <input
+                                type="text"
+                                id="projectId"
+                                placeholder="Auto-generated from project name"
+                                readonly
+                                style="background: #f8f9fa;"
+                            />
+                        </div>
+
+                        <div class="form-group autocomplete-container">
+                            <label for="projectSearch">Search Asana Projects *</label>
+                            <input
+                                type="text"
+                                id="projectSearch"
+                                placeholder="Start typing project name..."
+                                required
+                                autocomplete="off"
+                                oninput="searchProjects(this.value)"
+                                onfocus="loadAsanaProjects()"
+                            />
+                            <div id="projectResults" class="autocomplete-results"></div>
+                            <input type="hidden" id="selectedProjectGid" />
+                            <input type="hidden" id="selectedProjectName" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sectionSelect">Default Section *</label>
+                            <select id="sectionSelect" required disabled>
+                                <option value="">-- Select a project first --</option>
+                            </select>
+                            <small style="color: #7f8c8d; display: block; margin-top: 5px;">
+                                Default section for new tasks (usually Copywriter)
+                            </small>
+                        </div>
+
+                        <button type="submit" id="addProjectBtn">
+                            Add Project
+                        </button>
+                    </form>
+
+                    <div class="project-list" id="projectList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allAsanaProjects = [];
+        let selectedProject = null;
+
+        // Load projects on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProjects();
+            loadAsanaProjects();
+        });
+
+        // Load Asana projects from workspace
+        async function loadAsanaProjects() {
+            if (allAsanaProjects.length > 0) return; // Already loaded
+
+            try {
+                const response = await fetch('/admin/asana-projects');
+                allAsanaProjects = await response.json();
+                console.log(`Loaded ${allAsanaProjects.length} Asana projects`);
+            } catch (error) {
+                console.error('Failed to load Asana projects:', error);
+            }
+        }
+
+        // Search and filter projects
+        function searchProjects(query) {
+            const results = document.getElementById('projectResults');
+
+            if (!query || query.length < 2) {
+                results.classList.remove('show');
+                return;
+            }
+
+            const filtered = allAsanaProjects.filter(p =>
+                p.name.toLowerCase().includes(query.toLowerCase())
+            );
+
+            if (filtered.length === 0) {
+                results.innerHTML = '<div class="autocomplete-item" style="color: #7f8c8d;">No projects found</div>';
+            } else {
+                results.innerHTML = filtered.map(p => `
+                    <div class="autocomplete-item" onclick="selectProject('${p.gid}', '${p.name.replace(/'/g, "\\'")}')">
+                        ${p.name}
+                    </div>
+                `).join('');
+            }
+
+            results.classList.add('show');
+        }
+
+        // Select a project from autocomplete
+        async function selectProject(gid, name) {
+            selectedProject = { gid, name };
+
+            document.getElementById('projectSearch').value = name;
+            document.getElementById('selectedProjectGid').value = gid;
+            document.getElementById('selectedProjectName').value = name;
+            document.getElementById('projectResults').classList.remove('show');
+
+            // Auto-generate project ID
+            const projectId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            document.getElementById('projectId').value = projectId;
+
+            // Load sections for this project
+            await loadSections(gid);
+        }
+
+        // Load sections for a project
+        async function loadSections(projectGid) {
+            const sectionSelect = document.getElementById('sectionSelect');
+            sectionSelect.disabled = true;
+            sectionSelect.innerHTML = '<option value="">Loading sections...</option>';
+
+            try {
+                const response = await fetch(`/admin/sections/${projectGid}`);
+                const sections = await response.json();
+
+                sectionSelect.innerHTML = '<option value="">-- Select a section --</option>';
+                sections.forEach(s => {
+                    const option = document.createElement('option');
+                    option.value = s.gid;
+                    option.textContent = s.name;
+                    sectionSelect.appendChild(option);
+                });
+
+                sectionSelect.disabled = false;
+
+                // Try to auto-select "Copywriter" section
+                const copywriterSection = sections.find(s =>
+                    s.name.toLowerCase().includes('copywriter')
+                );
+                if (copywriterSection) {
+                    sectionSelect.value = copywriterSection.gid;
+                }
+
+            } catch (error) {
+                sectionSelect.innerHTML = '<option value="">Error loading sections</option>';
+                console.error('Failed to load sections:', error);
+            }
+        }
+
+        // Close autocomplete when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.autocomplete-container')) {
+                document.getElementById('projectResults').classList.remove('show');
+            }
+        });
+
+        // Load and display configured projects
+        async function loadProjects() {
+            try {
+                const response = await fetch('/admin/projects');
+                const projects = await response.json();
+
+                // Update project select dropdown
+                const select = document.getElementById('projectSelect');
+                select.innerHTML = '<option value="">-- Choose a project --</option>';
+                projects.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.id;
+                    option.textContent = p.name;
+                    select.appendChild(option);
+                });
+
+                // Update project list
+                const list = document.getElementById('projectList');
+                if (projects.length === 0) {
+                    list.innerHTML = '<p style="color: #7f8c8d; text-align: center; padding: 20px;">No projects configured yet. Add your first project above.</p>';
+                } else {
+                    list.innerHTML = projects.map(p => `
+                        <div class="project-item">
+                            <div class="project-info">
+                                <div class="project-name">${p.name}</div>
+                                <div class="project-details">
+                                    ID: ${p.id} | Project GID: ${p.project_gid}
+                                    ${p.section_gid ? `| Section: ${p.section_gid}` : ''}
+                                </div>
+                            </div>
+                            <button class="danger" onclick="deleteProject('${p.id}')">Delete</button>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                showAlert('projectAlert', 'error', 'Failed to load projects: ' + error.message);
+            }
+        }
+
+        // Add a new project
+        async function addProject(event) {
+            event.preventDefault();
+
+            const projectGid = document.getElementById('selectedProjectGid').value;
+            const projectName = document.getElementById('selectedProjectName').value;
+            const projectId = document.getElementById('projectId').value;
+            const sectionGid = document.getElementById('sectionSelect').value;
+
+            if (!projectGid) {
+                showAlert('projectAlert', 'error', 'Please select a project from the search results');
+                return;
+            }
+
+            if (!sectionGid) {
+                showAlert('projectAlert', 'error', 'Please select a default section');
+                return;
+            }
+
+            const btn = document.getElementById('addProjectBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>Adding Project...';
+
+            const project = {
+                id: projectId,
+                name: projectName,
+                project_gid: projectGid,
+                section_gid: sectionGid
+            };
+
+            try {
+                const response = await fetch('/admin/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(project)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to add project');
+                }
+
+                showAlert('projectAlert', 'success', `Project "${projectName}" added successfully!`);
+
+                // Reset form
+                document.getElementById('projectForm').reset();
+                document.getElementById('sectionSelect').disabled = true;
+                document.getElementById('sectionSelect').innerHTML = '<option value="">-- Select a project first --</option>';
+                selectedProject = null;
+
+                await loadProjects();
+
+            } catch (error) {
+                showAlert('projectAlert', 'error', error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Add Project';
+            }
+        }
+
+        // Delete a project
+        async function deleteProject(projectId) {
+            if (!confirm(`Are you sure you want to delete project "${projectId}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/projects/${projectId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to delete project');
+                }
+
+                showAlert('projectAlert', 'success', 'Project deleted successfully!');
+                await loadProjects();
+
+            } catch (error) {
+                showAlert('projectAlert', 'error', error.message);
+            }
+        }
+
+        // Submit a brief for processing
+        async function submitBrief(event) {
+            event.preventDefault();
+
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>Creating Tasks...';
+
+            const projectId = document.getElementById('projectSelect').value;
+            const googleDocUrl = document.getElementById('docUrl').value.trim();
+
+            try {
+                const response = await fetch('/admin/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        project_id: projectId,
+                        google_doc_url: googleDocUrl
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to create tasks');
+                }
+
+                const results = await response.json();
+
+                // Show success message
+                showAlert('submitAlert', 'success',
+                    `Successfully created ${results.tasks_created} out of ${results.total_tasks} tasks from "${results.campaign_name}"`
+                );
+
+                // Display task results
+                displayTaskResults(results);
+
+                // Reset form
+                document.getElementById('submitForm').reset();
+
+            } catch (error) {
+                showAlert('submitAlert', 'error', error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Create Tasks from Brief';
+            }
+        }
+
+        // Display task creation results
+        function displayTaskResults(results) {
+            const container = document.getElementById('taskResults');
+
+            if (!results.results || results.results.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const html = `
+                <h3 style="margin-top: 20px; margin-bottom: 10px; color: #2c3e50;">Task Creation Results</h3>
+                ${results.results.map(task => `
+                    <div class="task-result ${task.success ? 'success' : 'error'}">
+                        <strong>${task.task_name}</strong>
+                        ${task.success
+                            ? `<br><a href="${task.asana_task_url}" target="_blank" class="task-url">View in Asana →</a>`
+                            : `<br><span style="color: #e74c3c;">Error: ${task.error}</span>`
+                        }
+                    </div>
+                `).join('')}
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // Show alert message
+        function showAlert(elementId, type, message) {
+            const alertDiv = document.getElementById(elementId);
+            alertDiv.className = `alert alert-${type === 'error' ? 'error' : 'success'}`;
+            alertDiv.textContent = message;
+            alertDiv.style.display = 'block';
+
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
