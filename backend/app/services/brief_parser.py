@@ -28,7 +28,8 @@ class BriefParserService:
     async def parse_brief(
         self,
         doc_url: str,
-        parsing_instructions: Optional[str] = None
+        parsing_instructions: Optional[str] = None,
+        ai_model: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Parse a Google Doc brief and extract task definitions
@@ -36,6 +37,7 @@ class BriefParserService:
         Args:
             doc_url: Google Doc URL
             parsing_instructions: Optional custom instructions for parsing
+            ai_model: Optional Claude model to use (e.g., 'claude-haiku-4-5-20251001')
 
         Returns:
             Dictionary with:
@@ -55,7 +57,7 @@ class BriefParserService:
 
         # Step 2: Use Claude to parse the content
         logger.info("Parsing brief content with Claude AI")
-        parsed_data = await self._parse_with_ai(doc_content, parsing_instructions)
+        parsed_data = await self._parse_with_ai(doc_content, parsing_instructions, ai_model)
 
         # Step 3: Validate and clean parsed data
         validated_data = self._validate_parsed_data(parsed_data)
@@ -67,15 +69,20 @@ class BriefParserService:
     async def _parse_with_ai(
         self,
         doc_content: str,
-        parsing_instructions: Optional[str] = None
+        parsing_instructions: Optional[str] = None,
+        ai_model: Optional[str] = None
     ) -> Dict[str, Any]:
         """Use Claude to parse the brief content into structured task data"""
 
         prompt = self._build_parsing_prompt(doc_content, parsing_instructions)
 
+        # Use provided model or fall back to default
+        model = ai_model or self.model
+        logger.info(f"Using AI model: {model}")
+
         try:
             response = await self.anthropic.messages.create(
-                model=self.model,
+                model=model,
                 max_tokens=16000,  # Increased to handle large campaigns with many tasks
                 temperature=0.1,  # Low temperature for consistent parsing
                 messages=[

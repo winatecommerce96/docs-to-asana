@@ -33,6 +33,7 @@ class SubmitBriefRequest(BaseModel):
     """Request to submit a brief for processing"""
     project_id: str = Field(..., description="Project ID to create tasks in")
     google_doc_url: str = Field(..., description="Google Doc URL")
+    ai_model: Optional[str] = Field(None, description="Claude model to use for parsing (e.g., claude-sonnet-4-20250514)")
 
 
 # Helper functions
@@ -146,6 +147,8 @@ async def submit_brief(request: SubmitBriefRequest):
 
     logger.info(f"Submitting brief to project {project.name}")
     logger.info(f"Google Doc: {request.google_doc_url}")
+    if request.ai_model:
+        logger.info(f"Using AI model: {request.ai_model}")
 
     # Create tasks using TaskCreationService
     service = TaskCreationService()
@@ -156,6 +159,7 @@ async def submit_brief(request: SubmitBriefRequest):
             project_gid=project.project_gid,
             section_gid=project.section_gid,
             resend_upcycle_section_gid=project.resend_upcycle_section_gid,
+            ai_model=request.ai_model,
             dry_run=False
         )
 

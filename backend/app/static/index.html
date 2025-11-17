@@ -187,6 +187,12 @@
             color: #721c24;
         }
 
+        .alert-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+
         .loading {
             display: inline-block;
             width: 20px;
@@ -271,6 +277,19 @@
                                 placeholder="https://docs.google.com/document/d/..."
                                 required
                             />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="modelSelect">AI Model *</label>
+                            <select id="modelSelect" required>
+                                <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (Balanced - Recommended)</option>
+                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Most Capable)</option>
+                                <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (Fast & Accurate)</option>
+                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fastest & Most Economical)</option>
+                            </select>
+                            <small style="display: block; margin-top: 5px; color: #666;">
+                                💡 Haiku is 20x cheaper than Sonnet but may miss details in complex briefs
+                            </small>
                         </div>
 
                         <button type="submit" id="submitBtn">
@@ -616,6 +635,7 @@
 
             const projectId = document.getElementById('projectSelect').value;
             const googleDocUrl = document.getElementById('docUrl').value.trim();
+            const selectedModel = document.getElementById('modelSelect').value;
 
             try {
                 const response = await fetch('/admin/submit', {
@@ -623,7 +643,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         project_id: projectId,
-                        google_doc_url: googleDocUrl
+                        google_doc_url: googleDocUrl,
+                        ai_model: selectedModel
                     })
                 });
 
@@ -634,16 +655,37 @@
 
                 const results = await response.json();
 
-                // Show success message
-                showAlert('submitAlert', 'success',
-                    `Successfully created ${results.tasks_created} out of ${results.total_tasks} tasks from "${results.campaign_name}"`
-                );
-
-                // Display task results
-                displayTaskResults(results);
-
-                // Reset form
-                document.getElementById('submitForm').reset();
+                // Check for errors or no tasks
+                if (results.errors && results.errors.length > 0) {
+                    // Show first error message
+                    showAlert('submitAlert', 'error', results.errors[0]);
+                    displayTaskResults(results);
+                } else if (results.total_tasks === 0) {
+                    // No tasks found in the brief
+                    showAlert('submitAlert', 'error',
+                        `No tasks found in the brief. Please check the document format or contact support.`
+                    );
+                } else if (results.tasks_failed === results.total_tasks) {
+                    // All tasks failed
+                    showAlert('submitAlert', 'error',
+                        `Failed to create all ${results.total_tasks} tasks. Check the task results below for details.`
+                    );
+                    displayTaskResults(results);
+                } else if (results.tasks_failed > 0) {
+                    // Some tasks failed
+                    showAlert('submitAlert', 'warning',
+                        `Created ${results.tasks_created} out of ${results.total_tasks} tasks from "${results.campaign_name}". ${results.tasks_failed} tasks failed - check details below.`
+                    );
+                    displayTaskResults(results);
+                } else {
+                    // Complete success
+                    showAlert('submitAlert', 'success',
+                        `Successfully created ${results.tasks_created} out of ${results.total_tasks} tasks from "${results.campaign_name}"`
+                    );
+                    displayTaskResults(results);
+                    // Only reset form on complete success
+                    document.getElementById('submitForm').reset();
+                }
 
             } catch (error) {
                 showAlert('submitAlert', 'error', error.message);
@@ -681,7 +723,14 @@
         // Show alert message
         function showAlert(elementId, type, message) {
             const alertDiv = document.getElementById(elementId);
-            alertDiv.className = `alert alert-${type === 'error' ? 'error' : 'success'}`;
+            // Support error, warning, and success types
+            let alertClass = 'success';
+            if (type === 'error') {
+                alertClass = 'error';
+            } else if (type === 'warning') {
+                alertClass = 'warning';
+            }
+            alertDiv.className = `alert alert-${alertClass}`;
             alertDiv.textContent = message;
             alertDiv.style.display = 'block';
 

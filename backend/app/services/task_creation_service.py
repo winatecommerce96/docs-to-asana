@@ -58,6 +58,7 @@ class TaskCreationService:
         project_gid: str,
         section_gid: Optional[str] = None,
         resend_upcycle_section_gid: Optional[str] = None,
+        ai_model: Optional[str] = None,
         dry_run: bool = False
     ) -> Dict[str, Any]:
         """
@@ -68,6 +69,7 @@ class TaskCreationService:
             project_gid: Asana project GID to create tasks in
             section_gid: Optional section GID to place tasks in
             resend_upcycle_section_gid: Optional section GID for RESEND/UPCYCLE tasks
+            ai_model: Optional Claude model to use for parsing
             dry_run: If True, parse and preview but don't create tasks
 
         Returns:
@@ -94,7 +96,7 @@ class TaskCreationService:
         try:
             # Step 1: Parse the brief
             logger.info("Step 1: Parsing brief with AI")
-            parsed_brief = await self.brief_parser.parse_brief(doc_url)
+            parsed_brief = await self.brief_parser.parse_brief(doc_url, ai_model=ai_model)
 
             results["campaign_name"] = parsed_brief.get("campaign_name", "Untitled Campaign")
             tasks = parsed_brief.get("tasks", [])
