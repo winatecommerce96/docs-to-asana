@@ -2,7 +2,7 @@
 Admin API routes for managing projects and submitting briefs
 """
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from loguru import logger
@@ -15,6 +15,18 @@ from app.core.database import get_db
 from app.models.brief import ProjectConfig
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def error_response(status_code: int, error_code: str, detail: str, hint: str = ""):
+    """Create a standardized error response with error code and hint"""
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error_code": error_code,
+            "detail": detail,
+            "hint": hint
+        }
+    )
 
 
 # Models
@@ -84,9 +96,11 @@ async def add_project(project: Project, db: AsyncSession = Depends(get_db)):
 
     # Check if project ID already exists
     if any(p.id == project.id for p in projects):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Project with ID '{project.id}' already exists"
+        return error_response(
+            400,
+            "DUPLICATE_PROJECT_ID",
+            f"Project with ID '{project.id}' already exists",
+            "Choose a different project name or delete the existing project first."
         )
 
     # Verify the project exists in Asana
@@ -95,28 +109,67 @@ async def add_project(project: Project, db: AsyncSession = Depends(get_db)):
         custom_fields = await asana.get_project_custom_fields(project.project_gid)
         logger.info(f"Verified project {project.project_gid} - found {len(custom_fields)} custom fields")
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to verify project in Asana: {str(e)}"
-        )
+        error_str = str(e)
+        if "401" in error_str or "unauthorized" in error_str.lower():
+            return error_response(
+                400,
+                "ASANA_AUTH_ERROR",
+                "Failed to authenticate with Asana",
+                "Check that your ASANA_ACCESS_TOKEN environment variable is valid and not expired."
+            )
+        elif "404" in error_str or "not found" in error_str.lower():
+            return error_response(
+                400,
+                "ASANA_PROJECT_NOT_FOUND",
+                f"Project GID '{project.project_gid}' not found in Asana",
+                "Verify the project exists in your Asana workspace and you have access to it."
+            )
+        else:
+            return error_response(
+                400,
+                "ASANA_VERIFICATION_FAILED",
+                f"Failed to verify project in Asana: {error_str}",
+                "Check your Asana connection and project permissions."
+            )
 
     # Verify section if provided
     if project.section_gid:
         try:
             sections = await asana.get_project_sections(project.project_gid)
             if not any(s.get("gid") == project.section_gid for s in sections):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Section {project.section_gid} not found in project"
+                return error_response(
+                    400,
+                    "SECTION_NOT_FOUND",
+                    f"Section {project.section_gid} not found in project",
+                    "Make sure you selected a valid section from the dropdown."
                 )
         except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to verify section: {str(e)}"
+            return error_response(
+                400,
+                "SECTION_VERIFICATION_FAILED",
+                f"Failed to verify section: {str(e)}",
+                "Check that the section exists and you have access to it."
             )
 
     # Add project to database
-    await save_project(db, project)
+    try:
+        await save_project(db, project)
+    except Exception as e:
+        error_str = str(e)
+        if "duplicate" in error_str.lower() or "unique" in error_str.lower():
+            return error_response(
+                500,
+                "DATABASE_DUPLICATE_ERROR",
+                "Project already exists in database",
+                "Try refreshing the page and check if the project was already added."
+            )
+        else:
+            return error_response(
+                500,
+                "DATABASE_SAVE_ERROR",
+                f"Failed to save project to database: {error_str}",
+                "Check database connection. The DATABASE_URL environment variable must be correctly configured."
+            )
 
     logger.info(f"Added project: {project.name} ({project.id})")
     return project
