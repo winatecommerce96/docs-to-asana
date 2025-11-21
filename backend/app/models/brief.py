@@ -57,3 +57,16 @@ class BriefTask(Base):
 
     # Relationships
     brief = relationship("Brief", back_populates="tasks")
+
+
+class ProjectConfig(Base):
+    """Stored project configurations for brief processing"""
+    __tablename__ = "project_configs"
+
+    id = Column(String(255), primary_key=True)
+    name = Column(String(500), nullable=False)
+    project_gid = Column(String(255), nullable=False)
+    section_gid = Column(String(255))
+    resend_upcycle_section_gid = Column(String(255))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

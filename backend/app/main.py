@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from app.core.config import settings
+from app.core.database import init_db, close_db
 from app.api.routes import briefs, admin
 
 # Configure logging
@@ -56,7 +57,11 @@ async def startup_event():
     logger.info(f"AI Model: {settings.AI_MODEL}")
     logger.info(f"AI Provider: {settings.AI_PROVIDER}")
 
+    # Initialize database tables
+    await init_db()
+
 # Shutdown event
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Shutting down Asana Brief Creation service")
+    await close_db()

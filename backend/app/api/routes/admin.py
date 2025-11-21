@@ -1,22 +1,32 @@
 """
 Admin API routes for managing projects and submitting briefs
 """
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from loguru import logger
-import json
-import os
-from pathlib import Path
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
 
 from app.services.task_creation_service import TaskCreationService
 from app.core.asana_client import AsanaClient
+from app.core.database import get_db
+from app.models.brief import ProjectConfig
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-# Path to projects configuration file
-PROJECTS_FILE = Path(__file__).parent.parent.parent.parent / "projects.json"
+
+def error_response(status_code: int, error_code: str, detail: str, hint: str = ""):
+    """Create a standardized error response with error code and hint"""
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error_code": error_code,
+            "detail": detail,
+            "hint": hint
+        }
+    )
 
 
 # Models
@@ -34,50 +44,64 @@ class SubmitBriefRequest(BaseModel):
     project_id: str = Field(..., description="Project ID to create tasks in")
     google_doc_url: str = Field(..., description="Google Doc URL")
     ai_model: Optional[str] = Field(None, description="Claude model to use for parsing (e.g., claude-sonnet-4-20250514)")
+    assignee_gid: Optional[str] = Field(None, description="Asana user GID to assign all tasks to")
 
 
 # Helper functions
-def load_projects() -> List[Project]:
-    """Load projects from JSON file"""
-    if not PROJECTS_FILE.exists():
-        return []
-
+async def load_projects(db: AsyncSession) -> List[Project]:
+    """Load projects from database"""
     try:
-        with open(PROJECTS_FILE, 'r') as f:
-            data = json.load(f)
-            return [Project(**p) for p in data]
+        result = await db.execute(select(ProjectConfig))
+        configs = result.scalars().all()
+        return [Project(
+            id=c.id,
+            name=c.name,
+            project_gid=c.project_gid,
+            section_gid=c.section_gid,
+            resend_upcycle_section_gid=c.resend_upcycle_section_gid
+        ) for c in configs]
     except Exception as e:
         logger.error(f"Error loading projects: {e}")
         return []
 
 
-def save_projects(projects: List[Project]):
-    """Save projects to JSON file"""
+async def save_project(db: AsyncSession, project: Project):
+    """Save a project to database"""
     try:
-        with open(PROJECTS_FILE, 'w') as f:
-            json.dump([p.model_dump() for p in projects], f, indent=2)
+        config = ProjectConfig(
+            id=project.id,
+            name=project.name,
+            project_gid=project.project_gid,
+            section_gid=project.section_gid,
+            resend_upcycle_section_gid=project.resend_upcycle_section_gid
+        )
+        db.add(config)
+        await db.commit()
     except Exception as e:
-        logger.error(f"Error saving projects: {e}")
+        await db.rollback()
+        logger.error(f"Error saving project: {e}")
         raise
 
 
 # API Endpoints
 @router.get("/projects", response_model=List[Project])
-async def list_projects():
+async def list_projects(db: AsyncSession = Depends(get_db)):
     """List all configured projects"""
-    return load_projects()
+    return await load_projects(db)
 
 
 @router.post("/projects", response_model=Project)
-async def add_project(project: Project):
+async def add_project(project: Project, db: AsyncSession = Depends(get_db)):
     """Add a new project configuration"""
-    projects = load_projects()
+    projects = await load_projects(db)
 
     # Check if project ID already exists
     if any(p.id == project.id for p in projects):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Project with ID '{project.id}' already exists"
+        return error_response(
+            400,
+            "DUPLICATE_PROJECT_ID",
+            f"Project with ID '{project.id}' already exists",
+            "Choose a different project name or delete the existing project first."
         )
 
     # Verify the project exists in Asana
@@ -86,56 +110,91 @@ async def add_project(project: Project):
         custom_fields = await asana.get_project_custom_fields(project.project_gid)
         logger.info(f"Verified project {project.project_gid} - found {len(custom_fields)} custom fields")
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to verify project in Asana: {str(e)}"
-        )
+        error_str = str(e)
+        if "401" in error_str or "unauthorized" in error_str.lower():
+            return error_response(
+                400,
+                "ASANA_AUTH_ERROR",
+                "Failed to authenticate with Asana",
+                "Check that your ASANA_ACCESS_TOKEN environment variable is valid and not expired."
+            )
+        elif "404" in error_str or "not found" in error_str.lower():
+            return error_response(
+                400,
+                "ASANA_PROJECT_NOT_FOUND",
+                f"Project GID '{project.project_gid}' not found in Asana",
+                "Verify the project exists in your Asana workspace and you have access to it."
+            )
+        else:
+            return error_response(
+                400,
+                "ASANA_VERIFICATION_FAILED",
+                f"Failed to verify project in Asana: {error_str}",
+                "Check your Asana connection and project permissions."
+            )
 
     # Verify section if provided
     if project.section_gid:
         try:
             sections = await asana.get_project_sections(project.project_gid)
             if not any(s.get("gid") == project.section_gid for s in sections):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Section {project.section_gid} not found in project"
+                return error_response(
+                    400,
+                    "SECTION_NOT_FOUND",
+                    f"Section {project.section_gid} not found in project",
+                    "Make sure you selected a valid section from the dropdown."
                 )
         except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to verify section: {str(e)}"
+            return error_response(
+                400,
+                "SECTION_VERIFICATION_FAILED",
+                f"Failed to verify section: {str(e)}",
+                "Check that the section exists and you have access to it."
             )
 
-    # Add project
-    projects.append(project)
-    save_projects(projects)
+    # Add project to database
+    try:
+        await save_project(db, project)
+    except Exception as e:
+        error_str = str(e)
+        if "duplicate" in error_str.lower() or "unique" in error_str.lower():
+            return error_response(
+                500,
+                "DATABASE_DUPLICATE_ERROR",
+                "Project already exists in database",
+                "Try refreshing the page and check if the project was already added."
+            )
+        else:
+            return error_response(
+                500,
+                "DATABASE_SAVE_ERROR",
+                f"Failed to save project to database: {error_str}",
+                "Check database connection. The DATABASE_URL environment variable must be correctly configured."
+            )
 
     logger.info(f"Added project: {project.name} ({project.id})")
     return project
 
 
 @router.delete("/projects/{project_id}")
-async def delete_project(project_id: str):
+async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a project configuration"""
-    projects = load_projects()
-
-    # Find and remove project
-    projects = [p for p in projects if p.id != project_id]
-    save_projects(projects)
+    await db.execute(delete(ProjectConfig).where(ProjectConfig.id == project_id))
+    await db.commit()
 
     logger.info(f"Deleted project: {project_id}")
     return {"status": "deleted", "project_id": project_id}
 
 
 @router.post("/submit")
-async def submit_brief(request: SubmitBriefRequest):
+async def submit_brief(request: SubmitBriefRequest, db: AsyncSession = Depends(get_db)):
     """
     Submit a brief for processing
 
     This will create tasks in the specified project using the configured section
     """
     # Load projects
-    projects = load_projects()
+    projects = await load_projects(db)
 
     # Find the project
     project = next((p for p in projects if p.id == request.project_id), None)
@@ -149,6 +208,8 @@ async def submit_brief(request: SubmitBriefRequest):
     logger.info(f"Google Doc: {request.google_doc_url}")
     if request.ai_model:
         logger.info(f"Using AI model: {request.ai_model}")
+    if request.assignee_gid:
+        logger.info(f"Assigning tasks to user: {request.assignee_gid}")
 
     # Create tasks using TaskCreationService
     service = TaskCreationService()
@@ -160,6 +221,7 @@ async def submit_brief(request: SubmitBriefRequest):
             section_gid=project.section_gid,
             resend_upcycle_section_gid=project.resend_upcycle_section_gid,
             ai_model=request.ai_model,
+            assignee_gid=request.assignee_gid,
             dry_run=False
         )
 
@@ -196,4 +258,19 @@ async def list_asana_projects():
         return active_projects
     except Exception as e:
         logger.error(f"Error fetching Asana projects: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/asana-users")
+async def list_asana_users():
+    """Get all users in the Asana workspace"""
+    asana = AsanaClient()
+
+    try:
+        users = await asana.get_workspace_users()
+        # Sort by name for easier selection
+        users.sort(key=lambda u: u.get("name", "").lower())
+        return users
+    except Exception as e:
+        logger.error(f"Error fetching Asana users: {e}")
         raise HTTPException(status_code=500, detail=str(e))

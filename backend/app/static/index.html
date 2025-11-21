@@ -187,6 +187,12 @@
             color: #721c24;
         }
 
+        .alert-info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+
         .alert-warning {
             background: #fff3cd;
             border: 1px solid #ffeaa7;
@@ -292,6 +298,16 @@
                             </small>
                         </div>
 
+                        <div class="form-group">
+                            <label for="assigneeSelect">Assign Tasks To (Optional)</label>
+                            <select id="assigneeSelect">
+                                <option value="">-- No assignee (use API token owner) --</option>
+                            </select>
+                            <small style="display: block; margin-top: 5px; color: #666;">
+                                👤 Select a team member to assign all created tasks to
+                            </small>
+                        </div>
+
                         <button type="submit" id="submitBtn">
                             Create Tasks from Brief
                         </button>
@@ -374,6 +390,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadProjects();
             loadAsanaProjects();
+            loadAsanaUsers();
         });
 
         // Load Asana projects from workspace
@@ -386,6 +403,28 @@
                 console.log(`Loaded ${allAsanaProjects.length} Asana projects`);
             } catch (error) {
                 console.error('Failed to load Asana projects:', error);
+            }
+        }
+
+        // Load Asana users from workspace
+        async function loadAsanaUsers() {
+            try {
+                const response = await fetch('/admin/asana-users');
+                const users = await response.json();
+
+                const select = document.getElementById('assigneeSelect');
+                select.innerHTML = '<option value="">-- No assignee (use API token owner) --</option>';
+
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.gid;
+                    option.textContent = user.name + (user.email ? ` (${user.email})` : '');
+                    select.appendChild(option);
+                });
+
+                console.log(`Loaded ${users.length} Asana users`);
+            } catch (error) {
+                console.error('Failed to load Asana users:', error);
             }
         }
 
@@ -558,7 +597,13 @@
 
             const btn = document.getElementById('addProjectBtn');
             btn.disabled = true;
-            btn.innerHTML = '<span class="loading"></span>Adding Project...';
+
+            const updateProgress = (message) => {
+                btn.innerHTML = `<span class="loading"></span>${message}`;
+                showAlert('projectAlert', 'info', message);
+            };
+
+            updateProgress('Validating project configuration...');
 
             const resendUpcycleSectionGid = document.getElementById('resendUpcycleSectionSelect').value;
 
@@ -571,6 +616,8 @@
             };
 
             try {
+                updateProgress('Verifying project in Asana...');
+
                 const response = await fetch('/admin/projects', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -579,10 +626,19 @@
 
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.detail || 'Failed to add project');
+                    const errorCode = error.error_code || 'UNKNOWN_ERROR';
+                    const errorDetail = error.detail || 'Failed to add project';
+                    const errorHint = error.hint || '';
+
+                    let errorMessage = `[${errorCode}] ${errorDetail}`;
+                    if (errorHint) {
+                        errorMessage += `<br><small><strong>How to fix:</strong> ${errorHint}</small>`;
+                    }
+
+                    throw new Error(errorMessage);
                 }
 
-                showAlert('projectAlert', 'success', `Project "${projectName}" added successfully!`);
+                showAlert('projectAlert', 'success', `Project "${projectName}" added successfully and saved to database!`);
 
                 // Reset form
                 document.getElementById('projectForm').reset();
@@ -636,16 +692,24 @@
             const projectId = document.getElementById('projectSelect').value;
             const googleDocUrl = document.getElementById('docUrl').value.trim();
             const selectedModel = document.getElementById('modelSelect').value;
+            const assigneeGid = document.getElementById('assigneeSelect').value;
 
             try {
+                const requestBody = {
+                    project_id: projectId,
+                    google_doc_url: googleDocUrl,
+                    ai_model: selectedModel
+                };
+
+                // Only include assignee if selected
+                if (assigneeGid) {
+                    requestBody.assignee_gid = assigneeGid;
+                }
+
                 const response = await fetch('/admin/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        project_id: projectId,
-                        google_doc_url: googleDocUrl,
-                        ai_model: selectedModel
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (!response.ok) {
@@ -723,20 +787,24 @@
         // Show alert message
         function showAlert(elementId, type, message) {
             const alertDiv = document.getElementById(elementId);
-            // Support error, warning, and success types
+            // Support error, warning, success, and info types
             let alertClass = 'success';
             if (type === 'error') {
                 alertClass = 'error';
             } else if (type === 'warning') {
                 alertClass = 'warning';
+            } else if (type === 'info') {
+                alertClass = 'info';
             }
             alertDiv.className = `alert alert-${alertClass}`;
-            alertDiv.textContent = message;
+            alertDiv.innerHTML = message;  // Use innerHTML to support HTML content
             alertDiv.style.display = 'block';
 
+            // Don't auto-hide errors, shorter timeout for info messages
+            const timeout = type === 'error' ? 15000 : (type === 'info' ? 3000 : 5000);
             setTimeout(() => {
                 alertDiv.style.display = 'none';
-            }, 5000);
+            }, timeout);
         }
     </script>
 </body>

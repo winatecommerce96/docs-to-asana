@@ -49,10 +49,10 @@ async def init_db():
     """Initialize database - create all tables"""
     async with engine.begin() as conn:
         # Import all models here to ensure they are registered
-        from app import models  # noqa
+        from app.models.brief import Brief, BriefTask, ProjectConfig  # noqa
 
         # Create all tables
-        # await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables initialized")
 
 
