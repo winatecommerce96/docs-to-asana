@@ -298,6 +298,16 @@
                             </small>
                         </div>
 
+                        <div class="form-group">
+                            <label for="assigneeSelect">Assign Tasks To (Optional)</label>
+                            <select id="assigneeSelect">
+                                <option value="">-- No assignee (use API token owner) --</option>
+                            </select>
+                            <small style="display: block; margin-top: 5px; color: #666;">
+                                👤 Select a team member to assign all created tasks to
+                            </small>
+                        </div>
+
                         <button type="submit" id="submitBtn">
                             Create Tasks from Brief
                         </button>
@@ -380,6 +390,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadProjects();
             loadAsanaProjects();
+            loadAsanaUsers();
         });
 
         // Load Asana projects from workspace
@@ -392,6 +403,28 @@
                 console.log(`Loaded ${allAsanaProjects.length} Asana projects`);
             } catch (error) {
                 console.error('Failed to load Asana projects:', error);
+            }
+        }
+
+        // Load Asana users from workspace
+        async function loadAsanaUsers() {
+            try {
+                const response = await fetch('/admin/asana-users');
+                const users = await response.json();
+
+                const select = document.getElementById('assigneeSelect');
+                select.innerHTML = '<option value="">-- No assignee (use API token owner) --</option>';
+
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.gid;
+                    option.textContent = user.name + (user.email ? ` (${user.email})` : '');
+                    select.appendChild(option);
+                });
+
+                console.log(`Loaded ${users.length} Asana users`);
+            } catch (error) {
+                console.error('Failed to load Asana users:', error);
             }
         }
 
@@ -659,16 +692,24 @@
             const projectId = document.getElementById('projectSelect').value;
             const googleDocUrl = document.getElementById('docUrl').value.trim();
             const selectedModel = document.getElementById('modelSelect').value;
+            const assigneeGid = document.getElementById('assigneeSelect').value;
 
             try {
+                const requestBody = {
+                    project_id: projectId,
+                    google_doc_url: googleDocUrl,
+                    ai_model: selectedModel
+                };
+
+                // Only include assignee if selected
+                if (assigneeGid) {
+                    requestBody.assignee_gid = assigneeGid;
+                }
+
                 const response = await fetch('/admin/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        project_id: projectId,
-                        google_doc_url: googleDocUrl,
-                        ai_model: selectedModel
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (!response.ok) {

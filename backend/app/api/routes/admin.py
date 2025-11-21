@@ -44,6 +44,7 @@ class SubmitBriefRequest(BaseModel):
     project_id: str = Field(..., description="Project ID to create tasks in")
     google_doc_url: str = Field(..., description="Google Doc URL")
     ai_model: Optional[str] = Field(None, description="Claude model to use for parsing (e.g., claude-sonnet-4-20250514)")
+    assignee_gid: Optional[str] = Field(None, description="Asana user GID to assign all tasks to")
 
 
 # Helper functions
@@ -207,6 +208,8 @@ async def submit_brief(request: SubmitBriefRequest, db: AsyncSession = Depends(g
     logger.info(f"Google Doc: {request.google_doc_url}")
     if request.ai_model:
         logger.info(f"Using AI model: {request.ai_model}")
+    if request.assignee_gid:
+        logger.info(f"Assigning tasks to user: {request.assignee_gid}")
 
     # Create tasks using TaskCreationService
     service = TaskCreationService()
@@ -218,6 +221,7 @@ async def submit_brief(request: SubmitBriefRequest, db: AsyncSession = Depends(g
             section_gid=project.section_gid,
             resend_upcycle_section_gid=project.resend_upcycle_section_gid,
             ai_model=request.ai_model,
+            assignee_gid=request.assignee_gid,
             dry_run=False
         )
 
@@ -254,4 +258,19 @@ async def list_asana_projects():
         return active_projects
     except Exception as e:
         logger.error(f"Error fetching Asana projects: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/asana-users")
+async def list_asana_users():
+    """Get all users in the Asana workspace"""
+    asana = AsanaClient()
+
+    try:
+        users = await asana.get_workspace_users()
+        # Sort by name for easier selection
+        users.sort(key=lambda u: u.get("name", "").lower())
+        return users
+    except Exception as e:
+        logger.error(f"Error fetching Asana users: {e}")
         raise HTTPException(status_code=500, detail=str(e))

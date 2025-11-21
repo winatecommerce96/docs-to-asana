@@ -59,6 +59,7 @@ class TaskCreationService:
         section_gid: Optional[str] = None,
         resend_upcycle_section_gid: Optional[str] = None,
         ai_model: Optional[str] = None,
+        assignee_gid: Optional[str] = None,
         dry_run: bool = False
     ) -> Dict[str, Any]:
         """
@@ -70,6 +71,7 @@ class TaskCreationService:
             section_gid: Optional section GID to place tasks in
             resend_upcycle_section_gid: Optional section GID for RESEND/UPCYCLE tasks
             ai_model: Optional Claude model to use for parsing
+            assignee_gid: Optional user GID to assign all tasks to
             dry_run: If True, parse and preview but don't create tasks
 
         Returns:
@@ -127,6 +129,10 @@ class TaskCreationService:
             # Step 2: Create each task
             for idx, task_data in enumerate(tasks, 1):
                 logger.info(f"Processing task {idx}/{len(tasks)}: {task_data.get('name')}")
+
+                # Set assignee_gid on each task if provided
+                if assignee_gid:
+                    task_data["assignee_gid"] = assignee_gid
 
                 task_result = await self._create_single_task(
                     task_data,

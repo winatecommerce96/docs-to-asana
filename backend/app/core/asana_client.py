@@ -296,6 +296,38 @@ class AsanaClient:
                 logger.error(f"Error fetching projects: {e}")
                 raise
 
+    async def get_workspace_users(self, workspace_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Get all users in a workspace
+
+        Args:
+            workspace_id: Asana workspace ID (optional)
+
+        Returns:
+            List of user dictionaries with gid, name, and email
+        """
+        workspace = workspace_id or settings.ASANA_WORKSPACE_ID
+        url = f"{self.base_url}/workspaces/{workspace}/users"
+
+        params = {
+            "opt_fields": "name,email"
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(url, headers=self.headers, params=params)
+                response.raise_for_status()
+
+                data = response.json()
+                return data.get("data", [])
+
+            except httpx.HTTPStatusError as e:
+                logger.error(f"HTTP error fetching workspace users: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Error fetching workspace users: {e}")
+                raise
+
     async def get_project_sections(self, project_gid: str) -> List[Dict[str, Any]]:
         """
         Get all sections in a project
