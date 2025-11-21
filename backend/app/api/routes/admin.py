@@ -1,22 +1,20 @@
 """
 Admin API routes for managing projects and submitting briefs
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from loguru import logger
-import json
-import os
-from pathlib import Path
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
 
 from app.services.task_creation_service import TaskCreationService
 from app.core.asana_client import AsanaClient
+from app.core.database import get_db
+from app.models.brief import ProjectConfig
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-# Path to projects configuration file
-PROJECTS_FILE = Path(__file__).parent.parent.parent.parent / "projects.json"
 
 
 # Models
@@ -37,41 +35,52 @@ class SubmitBriefRequest(BaseModel):
 
 
 # Helper functions
-def load_projects() -> List[Project]:
-    """Load projects from JSON file"""
-    if not PROJECTS_FILE.exists():
-        return []
-
+async def load_projects(db: AsyncSession) -> List[Project]:
+    """Load projects from database"""
     try:
-        with open(PROJECTS_FILE, 'r') as f:
-            data = json.load(f)
-            return [Project(**p) for p in data]
+        result = await db.execute(select(ProjectConfig))
+        configs = result.scalars().all()
+        return [Project(
+            id=c.id,
+            name=c.name,
+            project_gid=c.project_gid,
+            section_gid=c.section_gid,
+            resend_upcycle_section_gid=c.resend_upcycle_section_gid
+        ) for c in configs]
     except Exception as e:
         logger.error(f"Error loading projects: {e}")
         return []
 
 
-def save_projects(projects: List[Project]):
-    """Save projects to JSON file"""
+async def save_project(db: AsyncSession, project: Project):
+    """Save a project to database"""
     try:
-        with open(PROJECTS_FILE, 'w') as f:
-            json.dump([p.model_dump() for p in projects], f, indent=2)
+        config = ProjectConfig(
+            id=project.id,
+            name=project.name,
+            project_gid=project.project_gid,
+            section_gid=project.section_gid,
+            resend_upcycle_section_gid=project.resend_upcycle_section_gid
+        )
+        db.add(config)
+        await db.commit()
     except Exception as e:
-        logger.error(f"Error saving projects: {e}")
+        await db.rollback()
+        logger.error(f"Error saving project: {e}")
         raise
 
 
 # API Endpoints
 @router.get("/projects", response_model=List[Project])
-async def list_projects():
+async def list_projects(db: AsyncSession = Depends(get_db)):
     """List all configured projects"""
-    return load_projects()
+    return await load_projects(db)
 
 
 @router.post("/projects", response_model=Project)
-async def add_project(project: Project):
+async def add_project(project: Project, db: AsyncSession = Depends(get_db)):
     """Add a new project configuration"""
-    projects = load_projects()
+    projects = await load_projects(db)
 
     # Check if project ID already exists
     if any(p.id == project.id for p in projects):
@@ -106,36 +115,32 @@ async def add_project(project: Project):
                 detail=f"Failed to verify section: {str(e)}"
             )
 
-    # Add project
-    projects.append(project)
-    save_projects(projects)
+    # Add project to database
+    await save_project(db, project)
 
     logger.info(f"Added project: {project.name} ({project.id})")
     return project
 
 
 @router.delete("/projects/{project_id}")
-async def delete_project(project_id: str):
+async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a project configuration"""
-    projects = load_projects()
-
-    # Find and remove project
-    projects = [p for p in projects if p.id != project_id]
-    save_projects(projects)
+    await db.execute(delete(ProjectConfig).where(ProjectConfig.id == project_id))
+    await db.commit()
 
     logger.info(f"Deleted project: {project_id}")
     return {"status": "deleted", "project_id": project_id}
 
 
 @router.post("/submit")
-async def submit_brief(request: SubmitBriefRequest):
+async def submit_brief(request: SubmitBriefRequest, db: AsyncSession = Depends(get_db)):
     """
     Submit a brief for processing
 
     This will create tasks in the specified project using the configured section
     """
     # Load projects
-    projects = load_projects()
+    projects = await load_projects(db)
 
     # Find the project
     project = next((p for p in projects if p.id == request.project_id), None)
