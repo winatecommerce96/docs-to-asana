@@ -47,13 +47,18 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     """Initialize database - create all tables"""
-    async with engine.begin() as conn:
-        # Import all models here to ensure they are registered
-        from app.models.brief import Brief, BriefTask, ProjectConfig  # noqa
+    try:
+        async with engine.begin() as conn:
+            # Import all models here to ensure they are registered
+            from app.models.brief import Brief, BriefTask, ProjectConfig  # noqa
 
-        # Create all tables
-        await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables initialized")
+            # Create all tables
+            await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database tables initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        logger.warning("Application will start but database operations may fail")
+        # Don't re-raise - allow app to start even if DB fails
 
 
 async def close_db():

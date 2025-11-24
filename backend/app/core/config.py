@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # Database
-    DATABASE_URL: str = ""
+    DATABASE_URL: str = "sqlite+aiosqlite:///./asana_briefs.db"  # Default to SQLite for resilience
     DB_PASSWORD: str = ""
 
     # Redis (optional, for Celery)
