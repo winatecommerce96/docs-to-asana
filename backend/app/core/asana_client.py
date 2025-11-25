@@ -296,21 +296,24 @@ class AsanaClient:
                 logger.error(f"Error fetching projects: {e}")
                 raise
 
-    async def get_workspace_users(self, workspace_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_workspace_users(self, workspace_id: Optional[str] = None, active_only: bool = True) -> List[Dict[str, Any]]:
         """
-        Get all users in a workspace
+        Get users in a workspace using workspace memberships for active status filtering
 
         Args:
             workspace_id: Asana workspace ID (optional)
+            active_only: If True, only return active users (default True)
 
         Returns:
             List of user dictionaries with gid, name, and email
         """
         workspace = workspace_id or settings.ASANA_WORKSPACE_ID
-        url = f"{self.base_url}/workspaces/{workspace}/users"
+
+        # Use workspace_memberships endpoint which includes is_active field
+        url = f"{self.base_url}/workspaces/{workspace}/workspace_memberships"
 
         params = {
-            "opt_fields": "name,email"
+            "opt_fields": "user.gid,user.name,user.email,is_active,is_guest"
         }
 
         async with httpx.AsyncClient() as client:
@@ -319,7 +322,34 @@ class AsanaClient:
                 response.raise_for_status()
 
                 data = response.json()
-                return data.get("data", [])
+                memberships = data.get("data", [])
+
+                users = []
+                for membership in memberships:
+                    user_data = membership.get("user", {})
+                    is_active = membership.get("is_active", True)
+                    is_guest = membership.get("is_guest", False)
+
+                    # Skip if filtering for active only and user is not active
+                    if active_only and not is_active:
+                        continue
+
+                    # Skip guests (optional - usually want regular members only)
+                    if is_guest:
+                        continue
+
+                    # Only include users with a name
+                    if user_data.get("name"):
+                        users.append({
+                            "gid": user_data.get("gid"),
+                            "name": user_data.get("name"),
+                            "email": user_data.get("email")
+                        })
+
+                # Sort by name for consistent ordering
+                users.sort(key=lambda u: u.get("name", "").lower())
+
+                return users
 
             except httpx.HTTPStatusError as e:
                 logger.error(f"HTTP error fetching workspace users: {e}")
