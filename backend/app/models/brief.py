@@ -1,8 +1,7 @@
 """
 SQLAlchemy models for brief processing
 """
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, func, JSON
 from sqlalchemy.orm import relationship
 import uuid
 
@@ -18,7 +17,7 @@ class Brief(Base):
     google_doc_id = Column(String(255), nullable=False, index=True)
     document_title = Column(String(500))
     raw_content = Column(Text)
-    parsed_structure = Column(JSONB)
+    parsed_structure = Column(JSON)
     workspace_id = Column(String(255), nullable=False, index=True)
     project_id = Column(String(255), nullable=False, index=True)
     project_name = Column(String(500))
@@ -49,7 +48,7 @@ class BriefTask(Base):
     task_name = Column(String(1000), nullable=False)
     task_description = Column(Text)
     task_order = Column(Integer)
-    custom_fields = Column(JSONB)
+    custom_fields = Column(JSON)
     status = Column(String(50), nullable=False, default='pending', index=True)
     error_message = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
